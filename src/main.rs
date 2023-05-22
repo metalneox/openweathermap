@@ -1,8 +1,7 @@
 use std::{thread, time};
 use clap::Parser;
-
 use serde::{Serialize,Deserialize};
-
+use serde_json::Value;
 /// Args manager
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -11,8 +10,8 @@ struct Args {
     #[arg(short, short)]
     api: String,
 
-    /// Api Key 
-    #[arg(short, short)]
+    /// City name
+    #[arg(short, short,default_value = "")]
     city: String,
     
     /// Timeout
@@ -54,13 +53,36 @@ async fn resolve_city(name:String,api:String) -> Result<(f64,f64),reqwest::Error
     Ok((temp.lat,temp.lon))
 }
 
+async fn auto() -> Result<(f64,f64),reqwest::Error>{
+	//curl -sf https://location.services.mozilla.com/v1/geolocate?key=geoclue
+	//{"location": {"lat": 44.0425, "lng": 12.421}, "accuracy": 20000.0}
+
+    let url = format!("https://location.services.mozilla.com/v1/geolocate?key=geoclue");
+ 
+    let body = reqwest::get(url).await?.json::<serde_json::Value>().await?; 
+	let cord = body.get("location").unwrap().clone();
+
+	let lat = cord.get("lat").and_then(Value::as_f64).unwrap();
+
+	let lon = cord.get("lng").and_then(Value::as_f64).unwrap();
+	
+	//println!("{},{}",lat,lon);
+    Ok((lat,lon))
+}
+
 
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
  
     //oppure funzione auto che prende la geoloc
-    let cord = resolve_city(args.city,args.api.clone()).await.unwrap();
+    let cord:(f64,f64);
+
+    if args.city.is_empty(){
+        cord = auto().await.unwrap();
+    }else{
+        cord = resolve_city(args.city,args.api.clone()).await.unwrap();
+    }
 
     loop{
         let weather = weather(cord,args.api.clone()).await;
@@ -80,7 +102,42 @@ async fn main() {
     }
  
 }
+//Api Pollini
+//http://api.openweathermap.org/data/2.5/air_pollution?lat={lat}&lon={lon}&appid={API key}
 
+/*
+{
+  "coord":[
+    50,
+    50
+  ],
+  "list":[
+    {
+      "dt":1605182400,
+      "main":{
+        "aqi":1
+      },
+      "components":{
+        "co":201.94053649902344,
+        "no":0.01877197064459324,
+        "no2":0.7711350917816162,
+        "o3":68.66455078125,
+        "so2":0.6407499313354492,
+        "pm2_5":0.5,
+        "pm10":0.540438711643219,
+        "nh3":0.12369127571582794
+      }
+    }
+  ]
+}
+
+
+*/
+
+
+
+//Api di openweathermap per ottenere la lat e lot.
+//http://api.openweathermap.org/geo/1.0/direct?q={city name},{state code},{country code}&limit={limit}&appid={API key}
 
 
 //use std::collections::HashMap;
