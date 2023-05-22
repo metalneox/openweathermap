@@ -5,5 +5,5 @@
 
 ##### Cli command:
 ```
-openweathermap -a <API> -c <CITY> -t <TIMEOUT>
+openweathermap -a <API> -t <TIMEOUT> -c <CITY> 
 ```
