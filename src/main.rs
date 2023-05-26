@@ -2,6 +2,7 @@ use std::{thread, time};
 use clap::Parser;
 use serde::{Serialize,Deserialize};
 use serde_json::Value;
+
 /// Args manager
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -17,6 +18,10 @@ struct Args {
     /// Timeout
     #[arg(short, short)]
     timeout: u32, 
+
+    /// Pollution 
+	#[arg(long, long, action)]
+    air: bool,
 }
 ///City
 #[derive(Serialize, Deserialize,Debug)]
@@ -26,6 +31,14 @@ pub struct City  {
     pub lon: f64,
     pub country: String,
     pub state: String,
+}
+#[derive(Debug)]
+enum Quality{
+    Good,
+    Fair,
+    Moderate,
+    Poor,
+    VeryPoor
 }
 
 pub type Cities = Vec<City>;
@@ -37,7 +50,6 @@ async fn weather(cord:(f64,f64),api:String) -> Result<serde_json::Value,reqwest:
     let url = format!("https://api.openweathermap.org/data/2.5/weather?lat={}&lon={}&appid={}",cord.0,cord.1,api);
  
     let body = reqwest::get(url).await?.json::<serde_json::Value>().await?;  
-    //let body = reqwest::get(url).await?.json().await?;
  
     Ok(body)
 }
@@ -66,16 +78,36 @@ async fn auto() -> Result<(f64,f64),reqwest::Error>{
 
 	let lon = cord.get("lng").and_then(Value::as_f64).unwrap();
 	
-	//println!("{},{}",lat,lon);
     Ok((lat,lon))
 }
 
+async fn pollution(cord:(f64,f64),api:String) -> Result<serde_json::Value,reqwest::Error>{
+
+	let url = format!("http://api.openweathermap.org/data/2.5/air_pollution?lat={}&lon={}&appid={}",cord.0,cord.1,api);
+    let body = reqwest::get(url).await?.json::<serde_json::Value>().await?;  
+ 
+    Ok(body)
+}
+
+fn air_quality(data:serde_json::Value) -> Quality{
+	//let flag = data["list"][0]["components"]["nh3"].as_f64().clone().unwrap();
+	let flag = data["list"][0]["main"]["aqi"].as_i64().clone();
+	//println!("{:#?}",flag);
+  	match flag{
+        Some(1) => Quality::Good,
+		Some(2) => Quality::Fair,
+		Some(3) => Quality::Moderate,
+		Some(4) => Quality::Poor,
+		Some(5) => Quality::VeryPoor,
+		Some(i64::MIN..=0_i64) | Some(6_i64..=i64::MAX) => todo!(),
+		None => todo!(),
+	}
+}
 
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
  
-    //oppure funzione auto che prende la geoloc
     let cord:(f64,f64);
 
     if args.city.is_empty(){
@@ -87,14 +119,20 @@ async fn main() {
     loop{
         let weather = weather(cord,args.api.clone()).await;
 
-        //let dati = weather.unwrap();
-
         let dati = weather.unwrap().get("weather").unwrap()[0].clone();
 
         println!("{}",dati["main"].to_string());
         println!("{}",dati["description"].to_string());
         println!("{}",dati["icon"].to_string());
 
+        if args.air == false{
+            println!("Arguments Air Quality not setting")
+        }else{
+            let pollution = pollution(cord,args.api.clone()).await;
+
+			let check = air_quality(pollution.unwrap());
+            println!("{:#?}",check);
+        }
 
         //5 secondi di pausa
         thread::sleep(time::Duration::from_secs(args.timeout.into()));
@@ -102,7 +140,7 @@ async fn main() {
     }
  
 }
-//Api Pollini
+//Api Airquality
 //http://api.openweathermap.org/data/2.5/air_pollution?lat={lat}&lon={lon}&appid={API key}
 
 /*
@@ -130,10 +168,7 @@ async fn main() {
     }
   ]
 }
-
-
 */
-
 
 
 //Api di openweathermap per ottenere la lat e lot.
@@ -173,16 +208,6 @@ async fn main() {
 //    ("Denmark", 24),
 //    ("Iceland", 12),
 //]);
-
-
-
-
-
-
-
-
-
-
 
 
 
